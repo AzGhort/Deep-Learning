@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 import argparse
 import datetime
+#!/usr/bin/env python3
+import argparse
+import datetime
 import os
 import re
 
@@ -10,10 +13,10 @@ import tensorflow as tf
 from mnist import MNIST
 
 
-def categorical_to_one_hot_smoothed(distribution, alfa):
-    smoothed = tf.keras.utils.to_categorical(distribution)
-    smoothed += (np.ones(shape=smoothed.shape) * alfa)/smoothed.shape[0]
-    smoothed[distribution] -= (np.ones(shape=smoothed.shape) * alfa)/smoothed.shape[0] + alfa
+def categorical_to_one_hot_smoothed(distribution, num_classes, alfa):
+    smoothed = tf.keras.utils.to_categorical(distribution, num_classes)
+    smoothed += (np.ones(num_classes) * alfa)/num_classes
+    smoothed[distribution] -= alfa/num_classes + alfa
     return smoothed
 
 
@@ -24,7 +27,7 @@ parser.add_argument("--dropout", default=0, type=float, help="Dropout regulariza
 parser.add_argument("--epochs", default=30, type=int, help="Number of epochs.")
 parser.add_argument("--hidden_layers", default="500", type=str, help="Hidden layer configuration.")
 parser.add_argument("--l2", default=0, type=float, help="L2 regularization.")
-parser.add_argument("--label_smoothing", default=0, type=float, help="Label smoothing.")
+parser.add_argument("--label_smoothing", default=0.1, type=float, help="Label smoothing.")
 parser.add_argument("--recodex", default=False, action="store_true", help="Evaluation in ReCodEx.")
 parser.add_argument("--threads", default=1, type=int, help="Maximum number of threads to use.")
 args = parser.parse_args()
@@ -58,14 +61,13 @@ model.add(tf.keras.layers.Flatten(input_shape=[MNIST.H, MNIST.W, MNIST.C]))
 if args.dropout > 0:
     model.add(tf.keras.layers.Dropout(rate=args.dropout))
 for hidden_layer in args.hidden_layers:
-    model.add(tf.keras.layers.Dense(hidden_layer, activation=tf.nn.relu),
-              kernel_regularizer=regularizer, bias_regularizer=regularizer)
+    model.add(tf.keras.layers.Dense(hidden_layer, activation=tf.nn.relu, kernel_regularizer=regularizer, bias_regularizer=regularizer))
     if args.dropout > 0:
         model.add(tf.keras.layers.Dropout(rate=args.dropout))
 model.add(tf.keras.layers.Dense(MNIST.LABELS, kernel_regularizer=regularizer, bias_regularizer=regularizer))
 
 loss_ = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
-metrics_ = [tf.keras.metrics.SparseCategoricalAccuracy(name="accuracy")],
+metrics_ = tf.keras.metrics.SparseCategoricalAccuracy(name="accuracy")
 train_i = mnist.train.data["images"]
 train_o = mnist.train.data["labels"]
 dev_i = mnist.dev.data["images"]
@@ -76,14 +78,14 @@ test_o = mnist.test.data["labels"]
 if args.label_smoothing > 0:
     loss_ = tf.keras.losses.CategoricalCrossentropy()
     metrics_ = tf.keras.metrics.CategoricalAccuracy()
-    train_o = [categorical_to_one_hot_smoothed(o, args.label_smoothing) for o in train_o]
-    dev_o = [categorical_to_one_hot_smoothed(o, args.label_smoothing) for o in dev_o]
-    test_o = [categorical_to_one_hot_smoothed(o, args.label_smoothing) for o in test_o]
+    train_o = [categorical_to_one_hot_smoothed(o, MNIST.LABELS, args.label_smoothing) for o in train_o]
+    dev_o = [categorical_to_one_hot_smoothed(o, MNIST.LABELS, args.label_smoothing) for o in dev_o]
+    test_o = [categorical_to_one_hot_smoothed(o, MNIST.LABELS, args.label_smoothing) for o in test_o]
 
 model.compile(
     optimizer=tf.keras.optimizers.Adam(),
     loss=loss_,
-    metrics=metrics_,
+    metrics=[metrics_],
 )
 
 tb_callback=tf.keras.callbacks.TensorBoard(args.logdir, update_freq=1000, profile_batch=1)
