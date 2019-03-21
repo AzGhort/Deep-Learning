@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+#!/usr/bin/env python3
 import argparse
 
 import numpy as np
@@ -53,11 +54,18 @@ for model in range(args.models):
 
 with open("mnist_ensemble.out", "w") as out_file:
     for model in range(args.models):
-        ind_logs = model.evaluate(mnist.dev.data["images"], mnist.dev.data["labels"], batch_size=args.batch_size)
+        ind_logs = models[model].evaluate(mnist.dev.data["images"], mnist.dev.data["labels"], batch_size=args.batch_size)
         individual_accuracy = ind_logs[1]
 
-        averagingLayer = tf.keras.layers.Average([m.output for m in models[0:model+1]])
-        averagedModel = tf.keras.layers.Model([m.input for m in models[0:model+1]], averagingLayer)
+        if model == 0:
+            print("{:.2f} {:.2f}".format(100 * individual_accuracy, 100 * individual_accuracy), file=out_file)
+            continue
+
+        inputLayer = tf.keras.layers.Input(shape=[MNIST.H, MNIST.W, MNIST.C])
+
+        outs = [m(inputLayer) for m in models[0:model+1]]
+        averagingLayer = tf.keras.layers.Average()(outs)
+        averagedModel = tf.keras.Model(inputLayer, averagingLayer)
 
         averagedModel.compile(
             optimizer=tf.keras.optimizers.Adam(),
@@ -65,9 +73,8 @@ with open("mnist_ensemble.out", "w") as out_file:
             metrics=[tf.keras.metrics.SparseCategoricalAccuracy(name="ensembled_accuracy")],
         )
 
-        ensemble_logs = model.evaluate([mnist.dev.data["images"] for _ in range(model + 1)],
-            mnist.dev.data["labels"], batch_size=args.batch_size)
-        ensemble_accuracy = ind_logs[1]
+        ensemble_logs = averagedModel.evaluate(mnist.dev.data["images"],mnist.dev.data["labels"], batch_size=args.batch_size)
+        ensemble_accuracy = ensemble_logs[1]
 
         # Print the results.
         print("{:.2f} {:.2f}".format(100 * individual_accuracy, 100 * ensemble_accuracy), file=out_file)
