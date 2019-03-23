@@ -12,14 +12,6 @@ import tensorflow as tf
 
 from mnist import MNIST
 
-
-def categorical_to_one_hot_smoothed(distribution, num_classes, alfa):
-    smoothed = tf.keras.utils.to_categorical(distribution, num_classes)
-    smoothed += (np.ones(num_classes) * alfa)/num_classes
-    smoothed[distribution] -= alfa/num_classes + alfa
-    return smoothed
-
-
 # Parse arguments
 parser = argparse.ArgumentParser()
 parser.add_argument("--batch_size", default=50, type=int, help="Batch size.")
@@ -76,11 +68,11 @@ test_i = mnist.test.data["images"]
 test_o = mnist.test.data["labels"]
 
 if args.label_smoothing > 0:
-    loss_ = tf.keras.losses.CategoricalCrossentropy()
-    metrics_ = tf.keras.metrics.CategoricalAccuracy()
-    train_o = [categorical_to_one_hot_smoothed(o, MNIST.LABELS, args.label_smoothing) for o in train_o]
-    dev_o = [categorical_to_one_hot_smoothed(o, MNIST.LABELS, args.label_smoothing) for o in dev_o]
-    test_o = [categorical_to_one_hot_smoothed(o, MNIST.LABELS, args.label_smoothing) for o in test_o]
+    loss_ = tf.keras.losses.CategoricalCrossentropy(label_smoothing = args.label_smoothing, from_logits=True)
+    metrics_ = tf.keras.metrics.CategoricalAccuracy(name="accuracy")
+    train_o = np.array([tf.keras.utils.to_categorical(o, MNIST.LABELS) for o in train_o])
+    dev_o = np.array([tf.keras.utils.to_categorical(o, MNIST.LABELS) for o in dev_o])
+    test_o = np.array([tf.keras.utils.to_categorical(o, MNIST.LABELS) for o in test_o])
 
 model.compile(
     optimizer=tf.keras.optimizers.Adam(),
