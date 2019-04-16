@@ -62,8 +62,8 @@ if __name__ == "__main__":
 
     # Parse arguments
     parser = argparse.ArgumentParser()
-    parser.add_argument("--batch_size", default=4, type=int, help="Batch size.")
-    parser.add_argument("--epochs", default=5, type=int, help="Number of epochs.")
+    parser.add_argument("--batch_size", default=32, type=int, help="Batch size.")
+    parser.add_argument("--epochs", default=10, type=int, help="Number of epochs.")
     parser.add_argument("--threads", default=1, type=int, help="Maximum number of threads to use.")
     args = parser.parse_args()
 
@@ -90,7 +90,7 @@ if __name__ == "__main__":
 
     # Generate test set annotations, but in args.logdir to allow parallel execution.
     with open(os.path.join(args.logdir, "caltech42_competition_test.txt"), "w", encoding="utf-8") as out_file:
-        for probs in network.predict(caltech42.test, args):
+        for probs in network.predict(caltech42, args):
             print(np.argmax(probs), file=out_file)
 
 # 698f4a25-47cc-11e9-b0fd-00505601122b
