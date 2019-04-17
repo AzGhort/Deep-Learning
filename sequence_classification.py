@@ -79,13 +79,14 @@ class Network:
         with tf.GradientTape() as tape:
             probabilities = self.model(batch["sequences"], training=True)
             loss = self._loss(batch["labels"], probabilities)
-        gradients = tape.gradient(loss, self.model.trainable_variables)
+
+        gradients = tape.gradient(loss, self.model.variables)
 
         gradient_norm = tf.linalg.global_norm(gradients)
         if clip_gradient is not None:
             (gradients, gradient_norm) = tf.clip_by_global_norm(gradients, clip_norm=clip_gradient)
 
-        grads_and_vars = zip(gradients, self._optimizer.variables())
+        grads_and_vars = zip(gradients, self.model.variables)
         self._optimizer.apply_gradients(grads_and_vars)
 
         tf.summary.experimental.set_step(self._optimizer.iterations)
@@ -96,8 +97,8 @@ class Network:
                     metric.update_state(loss)
                 else:
                     metric.update_state(batch["labels"], probabilities)
-                tf.summary.scalar("train/" + name, metric.result(), self._optimizer.iterations)
-            tf.summary.scalar("train/gradient_norm", gradient_norm, self._optimizer.iterations)
+                tf.summary.scalar("train/" + name, metric.result())
+            tf.summary.scalar("train/gradient_norm", gradient_norm)
 
     def train_epoch(self, dataset, args):
         for batch in dataset.batches(args.batch_size):
@@ -108,8 +109,9 @@ class Network:
         return self.model(batch["sequences"], training=False)
 
     def evaluate(self, dataset, args):
-        for metric in self._metrics:
+        for name, metric in self._metrics.items():
             metric.reset_states()
+
         for batch in dataset.batches(args.batch_size):
             predictions = self.predict_batch(batch)
             loss = self._loss(batch["labels"], predictions)
@@ -119,7 +121,7 @@ class Network:
                 else:
                     metric.update_state(batch["labels"], predictions)
 
-        metrics = {name: value for name, value in self._metrics.items()}
+        metrics = {name: metric.result() for name, metric in self._metrics.items()}
         with self._writer.as_default():
             for name, metric in metrics.items():
                 tf.summary.scalar("test/" + name, metric)
