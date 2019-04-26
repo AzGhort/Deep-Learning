@@ -13,7 +13,7 @@ class Network:
 
         embed_charseqs = tf.keras.layers.Embedding(num_chars, args.cle_dim, mask_zero=True)(charseqs)
         gru_charseqs = tf.keras.layers.Bidirectional(tf.keras.layers.GRU(units=args.cle_dim,
-                                                                         return_sequences=True))(embed_charseqs)
+                                                                         return_sequences=False))(embed_charseqs)
 
         embed_cle = tf.keras.layers.Lambda(lambda args: tf.gather(args, charseq_ids))(gru_charseqs)
         embed_words = tf.keras.layers.Embedding(num_words, args.we_dim, mask_zero=True)(word_ids)
@@ -40,12 +40,10 @@ class Network:
     @tf.function(input_signature=[[tf.TensorSpec(shape=[None, None], dtype=tf.int32)] * 3,
                                   tf.TensorSpec(shape=[None, None], dtype=tf.int32)])
     def train_batch(self, inputs, tags):
-        # TODO: Generate a mask from `tags` containing ones in positions
-        # where tags are nonzero (using `tf.not_equal`).
+        mask = tf.cast(tf.not_equal(tags, tf.zeros(shape=tags.shape), dtype=tf.float32))
         with tf.GradientTape() as tape:
             probabilities = self.model(inputs, training=True)
-            # TODO: Compute `loss` using `self._loss`, passing the generated
-            # tag mask as third parameter.
+            loss = self._loss(tags, probabilities, mask)
         gradients = tape.gradient(loss, self.model.variables)
         self._optimizer.apply_gradients(zip(gradients, self.model.variables))
 
@@ -53,38 +51,35 @@ class Network:
         with self._writer.as_default():
             for name, metric in self._metrics.items():
                 metric.reset_states()
-                if name == "loss": metric(loss)
-                else: # TODO: Update the `metric` using gold `tags` and generated `probabilities`,
-                      # passing the tag mask as third argument.
-                    pass
+                if name == "loss":
+                    metric(loss)
+                else:
+                    metric.update_state(tags, probabilities, mask)
                 tf.summary.scalar("train/{}".format(name), metric.result())
 
     def train_epoch(self, dataset, args):
         for batch in dataset.batches(args.batch_size):
-            self.train_batch([batch[dataset.FORMS].word_ids, batch[dataset.FORMS].charseq_ids, batch[dataset.FORMS].charseqs],
-                             batch[dataset.TAGS].word_ids)
+            self.train_batch([batch[dataset.FORMS].word_ids, batch[dataset.FORMS].charseq_ids,
+                              batch[dataset.FORMS].charseqs], batch[dataset.TAGS].word_ids)
 
     @tf.function(input_signature=[[tf.TensorSpec(shape=[None, None], dtype=tf.int32)] * 3,
                                   tf.TensorSpec(shape=[None, None], dtype=tf.int32)])
     def evaluate_batch(self, inputs, tags):
-        # TODO: Again generate a mask from `tags` containing ones in positions
-        # where tags are nonzero (using `tf.not_equal`).
+        mask = tf.cast(tf.not_equal(tags, tf.zeros(shape=tags.shape), dtype=tf.float32))
         probabilities = self.model(inputs, training=False)
-        # TODO: Compute `loss` using `self._loss`, passing the generated
-        # tag mask as third parameter.
+        loss = self._loss(tags, probabilities, mask)
         for name, metric in self._metrics.items():
-            if name == "loss": metric(loss)
-            else: # TODO: Update the `metric` using gold `tags` and generated `probabilities`,
-                  # passing the tag mask as third argument.
-                pass
+            if name == "loss":
+                metric(loss)
+            else:
+                metric.update_state(tags, probabilities, mask)
 
     def evaluate(self, dataset, dataset_name, args):
         for metric in self._metrics.values():
             metric.reset_states()
         for batch in dataset.batches(args.batch_size):
-            pass
-            # TODO: Evaluate the given match, using the same inputs as in training.
-
+            self.evaluate_batch([batch[dataset.FORMS].word_ids, batch[dataset.FORMS].charseq_ids,
+                                 batch[dataset.FORMS].charseqs], batch[dataset.TAGS].word_ids)
         metrics = {name: metric.result() for name, metric in self._metrics.items()}
         with self._writer.as_default():
             for name, value in metrics.items():
@@ -140,7 +135,7 @@ if __name__ == "__main__":
                       num_words=len(morpho.train.data[morpho.train.FORMS].words),
                       num_tags=len(morpho.train.data[morpho.train.TAGS].words),
                       num_chars=len(morpho.train.data[morpho.train.FORMS].alphabet))
-    network.plot()
+    #network.plot()
 
     for epoch in range(args.epochs):
         network.train_epoch(morpho.train, args)
