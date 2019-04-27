@@ -15,7 +15,7 @@ class Network:
         gru_charseqs = tf.keras.layers.Bidirectional(tf.keras.layers.GRU(units=args.cle_dim,
                                                                          return_sequences=False))(embed_charseqs)
 
-        embed_cle = tf.keras.layers.Lambda(lambda args: tf.gather(args, charseq_ids))(gru_charseqs)
+        embed_cle = tf.keras.layers.Lambda(lambda args: tf.gather(args[0], args[1]))([gru_charseqs, charseq_ids])
         embed_words = tf.keras.layers.Embedding(num_words, args.we_dim, mask_zero=True)(word_ids)
 
         concat = tf.keras.layers.Concatenate()([embed_words, embed_cle])
@@ -40,7 +40,7 @@ class Network:
     @tf.function(input_signature=[[tf.TensorSpec(shape=[None, None], dtype=tf.int32)] * 3,
                                   tf.TensorSpec(shape=[None, None], dtype=tf.int32)])
     def train_batch(self, inputs, tags):
-        mask = tf.cast(tf.not_equal(tags, tf.zeros(shape=tags.shape), dtype=tf.float32))
+        mask = tf.cast(tf.not_equal(tags, 0), dtype=tf.int32)
         with tf.GradientTape() as tape:
             probabilities = self.model(inputs, training=True)
             loss = self._loss(tags, probabilities, mask)
@@ -65,7 +65,7 @@ class Network:
     @tf.function(input_signature=[[tf.TensorSpec(shape=[None, None], dtype=tf.int32)] * 3,
                                   tf.TensorSpec(shape=[None, None], dtype=tf.int32)])
     def evaluate_batch(self, inputs, tags):
-        mask = tf.cast(tf.not_equal(tags, tf.zeros(shape=tags.shape), dtype=tf.float32))
+        mask = tf.cast(tf.not_equal(tags, 0), dtype=tf.int32)
         probabilities = self.model(inputs, training=False)
         loss = self._loss(tags, probabilities, mask)
         for name, metric in self._metrics.items():
@@ -147,4 +147,3 @@ if __name__ == "__main__":
 
 # 698f4a25-47cc-11e9-b0fd-00505601122b
 # b5770ea9-40bc-11e9-b0fd-00505601122b
-
