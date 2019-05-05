@@ -15,7 +15,7 @@ class Network:
         embed_charseqs = tf.keras.layers.Embedding(len(pdt.train.data[pdt.train.FORMS].alphabet),
                                                    32, mask_zero=True)(charseqs)
         gru_charseqs = tf.keras.layers.Bidirectional(tf.keras.layers.GRU(units=32,
-                                                                         return_sequences=False))(embed_charseqs)
+                                                                          return_sequences=False))(embed_charseqs)
 
         embed_cle = tf.keras.layers.Lambda(lambda args: tf.gather(args[0], args[1]))([gru_charseqs, charseq_ids])
         embed_words = tf.keras.layers.Embedding(len(pdt.train.data[pdt.train.FORMS].words),
@@ -23,7 +23,7 @@ class Network:
 
         concat = tf.keras.layers.Concatenate()([embed_words, embed_cle])
 
-        bidir = tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(units=64, return_sequences=True))(concat)
+        bidir = tf.keras.layers.Bidirectional(tf.keras.layers.GRU(units=64, return_sequences=True))(concat)
 
         predictions = tf.keras.layers.Dense(len(pdt.train.data[pdt.train.TAGS].words), activation=tf.nn.softmax)(bidir)
 
@@ -32,6 +32,12 @@ class Network:
         self._loss = tf.losses.SparseCategoricalCrossentropy()
         self._metrics = {"loss": tf.metrics.Mean(),
                          "accuracy": tf.metrics.SparseCategoricalAccuracy()}
+
+        self.model.compile(optimizer=tf.optimizers.Adam(),
+                           loss=tf.losses.SparseCategoricalCrossentropy(),
+                           metrics={"loss": tf.metrics.Mean(), "accuracy": tf.metrics.SparseCategoricalAccuracy()}
+                           #[tf.metrics.SparseCategoricalAccuracy(name="accuracy")]
+                           )
 
         self._writer = tf.summary.create_file_writer(args.logdir, flush_millis=10 * 1000)
 
@@ -58,7 +64,7 @@ class Network:
     def train_epoch(self, dataset, args):
         counter = 0
         for batch in dataset.batches(args.batch_size):
-            print("Training batch number " + str(counter))
+            #print("Training batch number " + str(counter))
             self.train_batch([batch[dataset.FORMS].word_ids, batch[dataset.FORMS].charseq_ids,
                               batch[dataset.FORMS].charseqs], batch[dataset.TAGS].word_ids)
             counter += 1
@@ -103,9 +109,9 @@ if __name__ == "__main__":
 
     # Parse arguments
     parser = argparse.ArgumentParser()
-    parser.add_argument("--batch_size", default=32, type=int, help="Batch size.")
+    parser.add_argument("--batch_size", default=70, type=int, help="Batch size.")
     parser.add_argument("--epochs", default=10, type=int, help="Number of epochs.")
-    parser.add_argument("--threads", default=12, type=int, help="Maximum number of threads to use.")
+    parser.add_argument("--threads", default=15, type=int, help="Maximum number of threads to use.")
     args = parser.parse_args()
 
     # Fix random seeds and number of threads
@@ -132,7 +138,7 @@ if __name__ == "__main__":
     for epoch in range(args.epochs):
         print("Epoch " + str(epoch) + " started.")
         network.train_epoch(morpho.train, args)
-        metrics = network.evaluate(morpho.dev, "dev", args)
+        #metrics = network.evaluate(morpho.dev, "dev", args)
         print("Epoch " + str(epoch) + " ended.")
         #print("Dev set accuracy: " + metrics["loss"])
         #print("Dev set loss: " + metrics["accuracy"])
@@ -149,3 +155,6 @@ if __name__ == "__main__":
                       morpho.test.data[morpho.test.TAGS].words[sentence[j]],
                       sep="\t", file=out_file)
             print(file=out_file)
+
+# 698f4a25-47cc-11e9-b0fd-00505601122b
+# b5770ea9-40bc-11e9-b0fd-00505601122b
